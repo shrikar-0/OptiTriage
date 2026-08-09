@@ -1,0 +1,113 @@
+// This is your Prisma schema file for OptiTriage.
+// Documentation: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+/// Lifecycle state of a doctor-initiated triage session.
+enum SessionStatus {
+  /// Session registered; SMS sent but patient has not opened the link yet.
+  WAITING
+  /// Patient opened the link and scan is actively in progress.
+  SCANNING
+  /// Scan complete — final vitals received.
+  COMPLETED
+  /// Session token expired before scan was completed.
+  EXPIRED
+}
+
+/// EWS risk band — matches the dashboard colour-coding.
+/// green = NEWS2 0-4 (Low)
+/// yellow = NEWS2 5-6 (Medium)
+/// red = NEWS2 7+ (High)
+enum RiskBand {
+  green
+  yellow
+  red
+}
+
+/// Role of a staff member — determines which dashboard view and permissions
+/// they receive. Managed server-side; the value stored here is authoritative.
+enum StaffRole {
+  DOCTOR
+  RECEPTIONIST
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+/// A registered staff member whose identity is managed by Supabase Auth.
+/// Created once via POST /api/staff immediately after the Supabase sign-up.
+/// The `supabaseUserId` links to auth.users in Supabase — it is the Supabase
+/// UUID, not stored as a foreign key here (cross-schema).
+model Staff {
+  id             String    @id @default(uuid()) @db.Uuid
+  /// Supabase auth.users UUID — used to look up the Staff row from a JWT.
+  supabaseUserId String    @unique
+  name           String
+  role           StaffRole
+  createdAt      DateTime  @default(now())
+}
+
+/// A doctor-initiated triage session.
+/// 
+/// ⚠️  PRIVACY: This table stores only the opaque doctorId UUID.
+///     The patient's phone number is NEVER persisted anywhere in the system —
+///     it is discarded immediately after the SMS dispatch in sessions.ts.
+model DoctorSession {
+  id          String        @id @default(uuid()) @db.Uuid
+  /// Opaque UUID identifying the doctor — sourced from their JWT claim.
+  /// Not a foreign key to a DoctorAuth table in this phase (added later).
+  doctorId    String        @db.Uuid
+  status      SessionStatus @default(WAITING)
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  /// Patient display name — collected at intake, not treated as sensitive PHI.
+  /// Phone number is NEVER stored (see privacy constraint in sessions.ts).
+  patientName String?
+  /// Patient age in years — used for NEWS2 context display in the queue.
+  patientAge  Int?
+
+  /// All patient scan snapshots captured within this session.
+  scans       PatientScan[]
+
+  @@index([doctorId, status])
+  @@index([expiresAt])
+}
+
+/// A single snapshot of patient vital-sign metrics captured during a scan.
+///
+/// ⚠️  DATA CONSTRAINT: The `metrics` JSONB column contains only numeric
+///     vital-sign values extracted by the patient-edge signal pipeline.
+///     Raw rPPG waveform samples and video frames NEVER leave the patient's
+///     browser — this column stores computed aggregates only.
+///
+///     Permitted `metrics` fields: bpm, hrv, respiratoryRate, ewsScore,
+///     motionAsymmetryFlag, timestamp. No image/video/binary data permitted.
+model PatientScan {
+  id                  String        @id @default(uuid()) @db.Uuid
+  sessionId           String        @db.Uuid
+  /// Cascade delete ensures no orphaned scans when a session is removed.
+  session             DoctorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  capturedAt          DateTime      @default(now())
+  /// Denormalised for fast queue sorting — avoids parsing JSONB on every query.
+  ewsScore            Int
+  /// Denormalised for fast queue sorting.
+  ewsRiskBand         RiskBand
+  /// JSONB snapshot of the numeric TriagePayload for this capture.
+  /// Only numeric/boolean primitives. See model doc for constraint details.
+  metrics             Json
+  /// Denormalised from metrics for fast asymmetry-flag filtering.
+  motionAsymmetryFlag Boolean       @default(false)
+
+  @@index([sessionId, capturedAt(sort: Desc)])
+  @@index([ewsScore(sort: Desc), capturedAt(sort: Desc)])
+}
