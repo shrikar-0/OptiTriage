@@ -41,6 +41,14 @@ export interface TriagePayload {
 
   /** Number of cycles discarded due to low signal quality. Optional for backward compatibility. */
   discardedCycles?: number;
+
+  /**
+   * Raw CHROM pulse waveform samples from the retained scan cycles, concatenated
+   * in order. Each element is a finite float (amplitude in arbitrary CHROM units).
+   * Maximum 4 000 samples (~4 cycles × 20 s × 30 fps). Empty when no valid
+   * frames were captured. This is numeric signal data — NOT image or video data.
+   */
+  pulseSignal?: number[];
 }
 
 /**
