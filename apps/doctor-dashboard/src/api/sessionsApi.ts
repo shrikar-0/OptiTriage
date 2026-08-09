@@ -17,7 +17,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export interface CreateSessionRequest {
-  /** Patient phone in E.164 format — optional. If omitted, no SMS is sent. */
+  /** Patient phone — forwarded to the backend WhatsApp gateway. Optional. */
   patientPhone?: string;
   patientName: string;
   patientAge?: number;
@@ -27,6 +27,7 @@ export interface CreateSessionSuccess {
   sessionId: string;
   doctorToken: string;
   patientToken: string;
+  triageLink: string;
   scanUrl: string;
   expiresAt: number; // Unix ms
   smsError?: string; // present if SMS failed but session was created

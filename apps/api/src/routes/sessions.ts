@@ -41,14 +41,9 @@ export function createSessionsRouter(io: SocketIOServer): Router {
   // ─── Zod schema — strict input validation ─────────────────────────────────────
 
   const CreateSessionBody = z.object({
-    /**
-     * Patient phone number in E.164 format.
-     * Optional — if omitted, no SMS is sent but the scan link is still generated.
-     * Accepted here, passed to SMS gateway, NEVER echoed in response.
-     */
     patientPhone: z
       .string()
-      .regex(/^\+[1-9]\d{6,14}$/, 'patientPhone must be a valid E.164 number (e.g. +12125551234)')
+      .regex(/^[\d\s()\-+]{7,15}$/, 'patientPhone must contain 7–15 digits')
       .optional(),
     patientName: z.string().min(1, 'patientName is required'),
     patientAge: z.number().int().positive().optional(),
@@ -61,6 +56,8 @@ export function createSessionsRouter(io: SocketIOServer): Router {
     sessionCreateLimiter,
     requireSupabaseJwt,
     async (req: Request, res: Response): Promise<void> => {
+      // No phone formatting needed on backend anymore
+
       // 1. Validate body
       const parsed = CreateSessionBody.safeParse(req.body);
       if (!parsed.success) {
@@ -71,7 +68,7 @@ export function createSessionsRouter(io: SocketIOServer): Router {
         return;
       }
 
-      const { patientPhone, patientName, patientAge } = parsed.data; // ← PII; handled only in steps 6 & 7 below
+      const { patientPhone, patientName, patientAge } = parsed.data;
       const staffUser = res.locals.staffUser;
 
       // 2. Create session
@@ -118,38 +115,22 @@ export function createSessionsRouter(io: SocketIOServer): Router {
         role: 'doctor',
       });
 
-      // 7. Build scan URL and optionally dispatch SMS
+      // 7. Build scan URL
       const scanUrl = `${config.scan.baseUrl}?token=${patientToken}`;
 
-      if (patientPhone) {
-        // patientPhone is passed through here — see privacy note in module doc.
-        try {
-          await sendScanLink(patientPhone, scanUrl);
-        } catch (err) {
-          console.error('[sessions] SMS dispatch failed:', (err as Error).message);
-          // SMS failed but the session + DB row are intact.
-          // Return the scan URL so the receptionist can share it manually.
-          res.status(207).json({
-            sessionId,
-            doctorToken,
-            patientToken,
-            scanUrl,
-            expiresAt,
-            smsError: 'SMS delivery failed — share the scan URL manually.',
-          });
-          return;
-        }
-      } else {
-        console.log(`[sessions] No phone provided — SMS skipped. Scan URL: ${scanUrl}`);
-      }
+      // 8. Fire-and-forget WhatsApp message (skipped silently if no phone / not ready)
+      const whatsappSent = await sendScanLink(patientPhone, scanUrl);
 
-      // 8. Respond — phone number deliberately excluded from response body.
+      // 9. Respond
       res.status(201).json({
+        success: true,
+        triageLink: scanUrl,
         sessionId,
         doctorToken,
         patientToken,
         scanUrl,
         expiresAt,
+        whatsappSent,
       });
     },
   );

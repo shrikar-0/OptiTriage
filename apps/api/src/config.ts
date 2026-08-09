@@ -49,15 +49,6 @@ export const config = {
     expirySeconds: optionalInt('JWT_SESSION_EXPIRY_SECONDS', 1800),
   },
 
-  twilio: {
-    /**
-     * If accountSid is absent the smsGateway module uses its console-log stub.
-     * Set all three vars in .env to enable live SMS delivery — no code changes.
-     */
-    accountSid: optional('TWILIO_ACCOUNT_SID', ''),
-    authToken: optional('TWILIO_AUTH_TOKEN', ''),
-    fromNumber: optional('TWILIO_FROM_NUMBER', ''),
-  },
 
   scan: {
     baseUrl: optional('PATIENT_SCAN_BASE_URL', 'http://localhost:5173/scan'),

@@ -1,66 +1,122 @@
 /**
  * src/lib/smsGateway.ts
  *
- * SMS delivery abstraction for Twilio magic-link messages.
+ * WhatsApp Web gateway using whatsapp-web.js.
  *
- * Stub mode (local dev / CI):
- *   When TWILIO_ACCOUNT_SID is not set, the module logs the scan link to the
- *   console.  The phone number is NEVER logged — only the link.
+ * On server start the client will emit a QR code in the terminal.
+ * Scan it once with your phone via WhatsApp → Linked Devices.
+ * LocalAuth persists the session to disk so re-scanning is not required
+ * across server restarts.
  *
- * Production mode:
- *   When all three Twilio env vars are present, a real SMS is sent via the
- *   Twilio REST API.  Swap in credentials in .env — no code changes required.
- *
- * ⚠️  PRIVACY: This function receives the patient's phone number (`to`).
- *     It is passed directly to Twilio (prod) or discarded after the call (stub).
- *     It is never written to logs, metrics, or the response body.
+ * Usage:
+ *   import { initWhatsApp, sendScanLink } from './lib/smsGateway';
+ *   await initWhatsApp();          // call once at startup
+ *   await sendScanLink(phone, url); // call per patient session
  */
 
-import { config } from '../config';
+import { Client, LocalAuth } from 'whatsapp-web.js';
+import qrcode from 'qrcode-terminal';
+
+// ─── Client singleton ─────────────────────────────────────────────────────────
+
+const client = new Client({
+  authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
+  puppeteer: {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+    ],
+  },
+});
+
+let _isReady = false;
+
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+
+client.on('qr', (qr) => {
+  console.log('[whatsapp] Scan the QR code below with WhatsApp → Linked Devices:');
+  qrcode.generate(qr, { small: true });
+});
+
+client.on('ready', () => {
+  console.log('[whatsapp] ✓ WhatsApp connected — automated messages enabled.');
+  _isReady = true;
+});
+
+client.on('authenticated', () => {
+  console.log('[whatsapp] Session authenticated (credentials cached).');
+});
+
+client.on('auth_failure', (msg) => {
+  console.error('[whatsapp] Authentication failure:', msg);
+  _isReady = false;
+});
+
+client.on('disconnected', (reason) => {
+  console.warn('[whatsapp] Client disconnected:', reason);
+  _isReady = false;
+});
 
 /**
- * Sends (or stubs) the patient scan link via SMS.
- *
- * @param to   Patient phone number in E.164 format — NEVER logged.
- * @param link The scan URL containing the session JWT token.
+ * Call once during server startup to boot the WhatsApp client.
+ * Resolves immediately; readiness is confirmed via the 'ready' event.
  */
-export async function sendScanLink(to: string, link: string): Promise<void> {
-  const { accountSid, authToken, fromNumber } = config.twilio;
-  const isStub = !accountSid || !authToken || !fromNumber;
-
-  if (isStub) {
-    // ── STUB MODE ───────────────────────────────────────────────────────────
-    // Phone number is intentionally omitted from this log line.
-    console.log(
-      `[SMS-STUB] Scan link (would be sent via Twilio in production):\n  ${link}\n` +
-        `  Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER in .env to enable live SMS.`,
-    );
-    return;
-  }
-
-  // ── PRODUCTION MODE ────────────────────────────────────────────────────────
-  // Dynamic import keeps the Twilio SDK out of the dependency graph entirely
-  // unless production credentials are actually present.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const twilio = require('twilio') as (sid: string, token: string) => TwilioClient;
-    const client = twilio(accountSid, authToken);
-    await client.messages.create({
-      body: `Your OptiTriage scan link (expires in 30 min): ${link}`,
-      from: fromNumber,
-      to, // phone number passed through — never logged
-    });
-    console.log(`[SMS] Scan link dispatched via Twilio.`);
-  } catch (err) {
-    // Re-throw so the session endpoint can return 502 rather than silently failing.
-    throw new Error(`[SMS] Twilio delivery failed: ${(err as Error).message}`);
-  }
+export function initWhatsApp(): void {
+  console.log('[whatsapp] Initialising WhatsApp client...');
+  client.initialize().catch((err: Error) => {
+    console.error('[whatsapp] Failed to initialise client:', err.message);
+  });
 }
 
-// ─── Minimal Twilio client type (avoids a hard dev dependency) ────────────────
+/**
+ * Graceful shutdown — call before process.exit so Puppeteer is cleaned up.
+ */
+export async function destroyWhatsApp(): Promise<void> {
+  await client.destroy().catch(() => {});
+}
 
-interface TwilioClient {
-  messages: {
-    create(params: { body: string; from: string; to: string }): Promise<unknown>;
-  };
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Sends the scan link to the patient's WhatsApp number.
+ *
+ * @param phone   Raw phone string entered by the doctor (e.g. "9876543210").
+ *                If falsy, the call is skipped silently.
+ * @param scanUrl Full triage URL to include in the message.
+ * @returns       `true` if the message was dispatched, `false` otherwise.
+ */
+export async function sendScanLink(phone: string | undefined, scanUrl: string): Promise<boolean> {
+  if (!phone) return false;
+
+  if (!_isReady) {
+    console.warn('[whatsapp] Client not ready — message skipped for this session.');
+    return false;
+  }
+
+  try {
+    // Strip non-numeric characters
+    const digits = phone.replace(/\D/g, '');
+    // Prepend country code for 10-digit Indian numbers
+    const waNumber = digits.length === 10 ? `91${digits}` : digits;
+    // Append @c.us domain required by whatsapp-web.js
+    const chatId = `${waNumber}@c.us`;
+
+    const message =
+      `Hello! Your doctor has sent you a remote vitals scan request via OptiTriage.\n\n` +
+      `Please tap the secure link below to begin:\n${scanUrl}\n\n` +
+      `This link expires in 30 minutes.`;
+
+    await client.sendMessage(chatId, message);
+    console.log(`[whatsapp] ✓ Scan link dispatched to ${waNumber}`);
+    return true;
+  } catch (err) {
+    console.error('[whatsapp] Failed to send message:', (err as Error).message);
+    return false;
+  }
 }

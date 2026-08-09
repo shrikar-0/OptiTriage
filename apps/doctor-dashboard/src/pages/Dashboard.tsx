@@ -90,7 +90,7 @@ export default function Dashboard({
     });
 
     socket.on('vitals:update', (payload: Record<string, unknown>) => {
-      console.log("Doctor received vitals update:", payload);
+      console.log('[Dashboard] Received vitals update:', payload);
       setSessions((prev) => {
         // Normalise the risk band label that comes from the server
         const raw = String(payload['ewsRiskBand'] ?? '').toLowerCase();

@@ -44,7 +44,7 @@ export default function PatientFlow() {
                   // We should ensure respiratoryRate is at least 5 to pass Zod schema
                   if (vitalsPayload.respiratoryRate < 5) vitalsPayload.respiratoryRate = 5;
                   
-                  console.log("Sending final vitals:", vitalsPayload);
+                  console.log('[Patient] Sending final vitals:', vitalsPayload, 'sessionId:', payload.sessionId);
                   emitVitals(token, vitalsPayload);
                 }
               }

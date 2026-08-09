@@ -23,6 +23,7 @@ import { useCreateSession } from '../hooks/useCreateSession';
 export function NewPatientScanForm({ accessToken, onSuccess }: { accessToken: string, onSuccess: (data: { patientName: string, patientAge?: number, scanUrl: string, sessionId: string, status: 'WAITING' }) => void }) {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
+  const [phone, setPhone] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const { state, submit, reset } = useCreateSession();
 
@@ -36,19 +37,23 @@ export function NewPatientScanForm({ accessToken, onSuccess }: { accessToken: st
     if (!canSubmit) return;
 
     const parsedAge = age.trim() ? parseInt(age.trim(), 10) : undefined;
-    const result = await submit(undefined, name.trim(), parsedAge, accessToken);
+    // Pass phone to backend — the WhatsApp gateway will dispatch the link silently
+    const result = await submit(phone.trim() || undefined, name.trim(), parsedAge, accessToken);
 
     if (result.ok && result.data) {
+      const scanUrl = result.data.triageLink || result.data.scanUrl;
+
       onSuccess({
         patientName: name.trim(),
         patientAge: parsedAge,
-        scanUrl: result.data.scanUrl,
+        scanUrl,
         sessionId: result.data.sessionId,
         status: 'WAITING',
       });
       // Form resets immediately so next patient can be registered
       setName('');
       setAge('');
+      setPhone('');
       setNameTouched(false);
       reset();
     }
@@ -128,7 +133,37 @@ export function NewPatientScanForm({ accessToken, onSuccess }: { accessToken: st
         />
       </div>
 
-      {/* Removed phone input section */}
+      {/* Phone Number */}
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="patient-phone-input"
+          className="text-sm font-medium"
+          style={{ color: '#1a2e35' }}
+        >
+          Phone number
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="patient-phone-input"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+1 555-555-5555"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            disabled={isLoading}
+            className="w-full rounded-xl border bg-white px-4 py-3 text-sm transition-all duration-200 focus:outline-none"
+            style={{ borderColor: 'rgba(79,143,168,0.3)', color: '#1a2e35' }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = '#4F8FA8';
+              e.currentTarget.style.boxShadow = '0 0 0 2px rgba(79,143,168,0.25)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(79,143,168,0.3)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          />
+        </div>
+      </div>
 
       {/* Server / network error banner */}
       {state.status === 'error' && (
@@ -161,27 +196,27 @@ export function NewPatientScanForm({ accessToken, onSuccess }: { accessToken: st
         aria-busy={isLoading}
         className="relative w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98]"
         style={{
-          backgroundColor: canSubmit ? '#4F8FA8' : 'rgba(79,143,168,0.4)',
+          backgroundColor: canSubmit ? (phone.trim() ? '#22c55e' : '#4F8FA8') : 'rgba(79,143,168,0.4)',
           cursor: canSubmit ? 'pointer' : 'not-allowed',
         }}
         onMouseEnter={(e) => {
-          if (canSubmit) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#3d7a91';
+          if (canSubmit) (e.currentTarget as HTMLButtonElement).style.backgroundColor = phone.trim() ? '#16a34a' : '#3d7a91';
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.backgroundColor = canSubmit ? '#4F8FA8' : 'rgba(79,143,168,0.4)';
+          (e.currentTarget as HTMLButtonElement).style.backgroundColor = canSubmit ? (phone.trim() ? '#22c55e' : '#4F8FA8') : 'rgba(79,143,168,0.4)';
         }}
       >
         {isLoading ? (
           <span className="flex items-center justify-center gap-2">
             <Spinner />
-            Sending triage link…
+            {phone.trim() ? 'Generating & opening WhatsApp…' : 'Generating scan link…'}
           </span>
         ) : (
           <span className="flex items-center justify-center gap-2">
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
             </svg>
-            Generate Scan Link
+            {phone.trim() ? 'Generate & Send via WhatsApp' : 'Generate Link Only'}
           </span>
         )}
       </button>

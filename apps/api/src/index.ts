@@ -37,6 +37,7 @@ import { disconnectPrisma, getPrismaClient, checkDbConnection } from './db/prism
 import { supabaseAdmin } from './lib/supabaseAdmin';
 import { getEwsRiskBand } from '@optitriage/shared';
 import type { TriagePayload } from '@optitriage/shared';
+import { initWhatsApp, destroyWhatsApp } from './lib/smsGateway';
 
 // ─── Express App ──────────────────────────────────────────────────────────────
 
@@ -237,7 +238,7 @@ triageNs.on('connection', (socket) => {
   // ── vitals event — patient → server → doctor ─────────────────────────────
 
   socket.on('vitals', (rawPayload: unknown) => {
-    console.log("Received vitals from patient:", rawPayload);
+    console.log('[API] Received vitals:', rawPayload);
     // Only patients may push vitals
     if (role !== 'patient') {
       socket.emit('error', {
@@ -347,14 +348,8 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 httpServer.listen(config.port, () => {
   console.log(`OptiTriage API listening on http://localhost:${config.port}`);
-  console.log(
-    `SMS mode: ${
-      config.twilio.accountSid
-        ? 'LIVE (Twilio credentials present)'
-        : 'STUB (console-log only — set Twilio env vars to enable SMS)'
-    }`,
-  );
-
+  // Start WhatsApp gateway (prints QR to terminal on first run)
+  initWhatsApp();
   // Run DB health check immediately on boot so connectivity issues are visible
   // in server logs rather than only surfacing on the first authenticated request.
   checkDbConnection().then((ok) => {
@@ -378,6 +373,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   console.log('[shutdown] SIGINT received — closing server.');
   await disconnectPrisma();
+  await destroyWhatsApp();
   httpServer.close(() => process.exit(0));
 });
 
