@@ -113,6 +113,8 @@ const VitalsEventSchema = z.object({
   ewsScore: z.number().int().min(0).max(20),
   totalCycles: z.number().int().min(1).max(5).optional(),
   discardedCycles: z.number().int().min(0).max(4).optional(),
+  /** Raw CHROM waveform — numeric only, max 4 000 samples. */
+  pulseSignal: z.array(z.number().finite()).max(4000).optional(),
 });
 
 // ─── Triage Namespace ─────────────────────────────────────────────────────────

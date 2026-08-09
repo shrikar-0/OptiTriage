@@ -13,6 +13,8 @@ export interface VitalsFromSession {
   ewsRiskBand: 'green' | 'yellow' | 'red';
   motionAsymmetryFlag: boolean;
   signalQuality: string;
+  /** Raw CHROM pulse waveform samples from the completed scan. */
+  pulseSignal?: number[];
 }
 
 /** Derive a VitalsFromSession from a completed QueueItem. Returns null if metrics absent. */
@@ -38,21 +40,9 @@ export function vitalsFromQueueItem(item: QueueItem): VitalsFromSession | null {
     ewsRiskBand:       item.ewsRiskBand ?? 'green',
     motionAsymmetryFlag: item.motionAsymmetryFlag ?? false,
     signalQuality,
+    pulseSignal:       item.metrics?.pulseSignal ?? [],
   };
 }
-
-// ─── ECG waveform generator (decorative) ─────────────────────────────────────
-
-const generateECGPoint = (x: number): number => {
-  const mod = x % 100;
-  if (mod < 30) return 50;
-  if (mod < 35) return 40;
-  if (mod < 40) return 70;
-  if (mod < 42) return 10;
-  if (mod < 47) return 60;
-  if (mod < 55) return 50;
-  return 50;
-};
 
 // ─── VitalsPanel ─────────────────────────────────────────────────────────────
 
@@ -62,7 +52,6 @@ interface VitalsPanelProps {
 
 export default function VitalsPanel({ vitals }: VitalsPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef  = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -70,35 +59,59 @@ export default function VitalsPanel({ vitals }: VitalsPanelProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const draw = () => {
-      const W = canvas.width;
-      const H = canvas.height;
-      ctx.clearRect(0, 0, W, H);
+    const signal = vitals?.pulseSignal ?? [];
+    const W = canvas.width;
+    const H = canvas.height;
 
-      ctx.strokeStyle = 'rgba(166,203,211,0.3)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < W; x += 20) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-      }
-      for (let y = 0; y < H; y += 20) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      }
+    ctx.clearRect(0, 0, W, H);
 
-      ctx.strokeStyle = '#4F8FA8';
-      ctx.lineWidth   = 2;
-      ctx.lineJoin    = 'round';
+    // Grid
+    ctx.strokeStyle = 'rgba(166,203,211,0.3)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 20) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += 20) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    if (signal.length < 2) {
+      // No signal — draw flat dashed line with label
+      ctx.strokeStyle = 'rgba(79,143,168,0.3)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      for (let i = 0; i < W; i++) {
-        const y = (generateECGPoint(i + frameRef.current) / 100) * H;
-        i === 0 ? ctx.moveTo(i, y) : ctx.lineTo(i, y);
-      }
+      ctx.moveTo(0, H / 2);
+      ctx.lineTo(W, H / 2);
       ctx.stroke();
-      frameRef.current += 0.8;
-    };
+      ctx.setLineDash([]);
 
-    const interval = setInterval(draw, 33);
-    return () => clearInterval(interval);
-  }, []);
+      ctx.fillStyle = 'rgba(122,140,133,0.6)';
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('No pulse signal recorded', W / 2, H / 2 - 10);
+      return;
+    }
+
+    // Normalize signal to canvas height
+    const min = Math.min(...signal);
+    const max = Math.max(...signal);
+    const range = max - min || 1;
+    const padding = 10;
+
+    ctx.strokeStyle = '#4F8FA8';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+
+    signal.forEach((val, i) => {
+      const x = (i / (signal.length - 1)) * W;
+      const y = H - padding - ((val - min) / range) * (H - padding * 2);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+
+    ctx.stroke();
+  }, [vitals?.pulseSignal]);
 
   // ── Empty state (no session selected) ──────────────────────────────────────
   if (!vitals) {
@@ -229,13 +242,17 @@ export default function VitalsPanel({ vitals }: VitalsPanelProps) {
         </div>
       </div>
 
-      {/* Live ECG chart */}
+      {/* Pulse signal waveform */}
       <div className="bg-white rounded-xl p-6 mb-6" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
         <div className="flex justify-between items-center mb-4">
           <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#2C3E35' }}>
-            Live ECG Waveform
+            Pulse Signal (rPPG)
           </span>
-          <span className="text-sm" style={{ color: '#7A8C85' }}>Last 30 seconds</span>
+          <span className="text-sm" style={{ color: '#7A8C85' }}>
+            {vitals.pulseSignal?.length
+              ? `${vitals.pulseSignal.length} samples`
+              : 'No data'}
+          </span>
         </div>
         <canvas
           ref={canvasRef}

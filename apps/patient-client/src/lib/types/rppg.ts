@@ -55,6 +55,8 @@ export interface RppgMetrics {
   rppgTimestampDtStd?: number;
   pulseStd?: number;
   pulseP2P?: number;
+  /** Raw CHROM signal samples for the current window (only present when valid === true). */
+  pulseSignal?: number[];
   // NEW DIAGNOSTICS:
   cameraFps?: number;
   cameraFrameCount?: number;

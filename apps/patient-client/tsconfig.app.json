@@ -23,7 +23,7 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Path aliases — baseUrl deprecated in TS6; use ignoreDeprecations */
-    "ignoreDeprecations": "6.0",
+    
     "baseUrl": ".",
     "paths": {
       "@optitriage/shared": ["../../packages/shared/src/index.ts"]

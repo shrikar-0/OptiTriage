@@ -53,8 +53,29 @@ export function guardNumericPayload(data: unknown): GuardRejection | null {
       };
     }
 
-    // Nested objects / arrays — payload must be flat
+    // Nested objects / arrays — payload must be flat, with ONE exception:
+    // pulseSignal is a flat number[] carrying raw CHROM waveform samples.
+    // All elements must be finite numbers; length is capped to prevent abuse.
     if (type === 'object' && value !== null) {
+      if (key === 'pulseSignal' && Array.isArray(value)) {
+        const MAX_PULSE_SAMPLES = 4000; // ~4 cycles × 20 s × 30 fps
+        if ((value as unknown[]).length > MAX_PULSE_SAMPLES) {
+          return {
+            field: key,
+            reason: `pulseSignal exceeds the maximum of ${MAX_PULSE_SAMPLES} samples.`,
+          };
+        }
+        for (const sample of value as unknown[]) {
+          if (typeof sample !== 'number' || !isFinite(sample)) {
+            return {
+              field: key,
+              reason: 'pulseSignal must contain only finite numbers.',
+            };
+          }
+        }
+        // pulseSignal passes — continue to next field
+        continue;
+      }
       return {
         field: key,
         reason: `Nested objects are not permitted. Field "${key}" contains an object/array.`,

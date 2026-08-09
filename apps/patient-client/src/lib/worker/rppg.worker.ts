@@ -279,6 +279,8 @@ self.onmessage = async (e: MessageEvent<RppgWorkerMessageIn>) => {
       let timestampDtStd = timestampDtStats.std;
 
       let fftResult: ReturnType<typeof FFTProcessor.analyze> | undefined;
+      // Hoisted so postMessage can reference the computed signal without a second processWindow call.
+      let lastPulseSignal: number[] | undefined;
 
       // 3. Run CHROM & FFT if buffer is full and SQI is acceptable
       if (skinBuffer.length >= currentMaxSamples) {
@@ -292,6 +294,7 @@ self.onmessage = async (e: MessageEvent<RppgWorkerMessageIn>) => {
             const mean = pulseSignal.reduce((sum, v) => sum + v, 0) / pulseSignal.length;
             pulseStd = Math.sqrt(pulseSignal.reduce((sum, v) => sum + (v - mean) ** 2, 0) / pulseSignal.length);
             pulseP2P = max - min;
+            lastPulseSignal = pulseSignal;
           }
 
           fftResult = FFTProcessor.analyze(pulseSignal, measuredFps, timestamps, sqi);
@@ -395,6 +398,8 @@ self.onmessage = async (e: MessageEvent<RppgWorkerMessageIn>) => {
           rppgTimestampDtStd: timestampDtStd,
           pulseStd,
           pulseP2P,
+          // Raw CHROM output for waveform rendering — only emitted on valid frames.
+          pulseSignal: valid ? lastPulseSignal : undefined,
           workerProcessFramesReceived,
           workerProcessFramesCompleted,
           workerProcessAvgTime: avgProc,

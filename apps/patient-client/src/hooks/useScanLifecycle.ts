@@ -14,6 +14,8 @@ export interface CycleResult {
   bpmValid: boolean;
   /** True only when at least one valid HRV sample contributed during this cycle. */
   hrvValid: boolean;
+  /** Last raw CHROM signal window captured during this cycle (empty when no valid frame occurred). */
+  pulseSignal: number[];
 }
 
 export interface FinalResults {
@@ -30,6 +32,10 @@ export interface FinalResults {
    *  OR cycles passed SQI but the FFT never produced a real peak.
    *  UI should prompt the user to retry with better lighting / stillness. */
   weakSignal: boolean;
+  /** Concatenated raw CHROM output samples from all retained cycles, in order.
+   *  One entry per FFT window sample point that went into the final result.
+   *  Empty when no valid frames were recorded. */
+  pulseSignal: number[];
 }
 
 export interface ScanLifecycleState {
@@ -89,6 +95,8 @@ export function useScanLifecycle(
     hrvCount: 0,  // frames with a valid HRV value
     respRateCount: 0,
     sqiCount: 0,   // ALL frames where metrics is non-null
+    /** Most-recent valid CHROM window for this cycle (replaced on every valid frame). */
+    lastPulseSignal: [] as number[],
   });
 
   // Mirror of completedCycles state kept in a ref so the processing effect can
@@ -122,7 +130,7 @@ export function useScanLifecycle(
     pendingCycleRef.current = null;
     cycleAccumulators.current = {
       bpmSum: 0, hrvSum: 0, respRateSum: 0, asymmetrySum: [0, 0, 0, 0, 0], sqiSum: 0,
-      bpmCount: 0, hrvCount: 0, respRateCount: 0, sqiCount: 0,
+      bpmCount: 0, hrvCount: 0, respRateCount: 0, sqiCount: 0, lastPulseSignal: [],
     };
   }, []);
 
@@ -156,6 +164,10 @@ export function useScanLifecycle(
       if (metrics.hrvValid) {
         cycleAccumulators.current.hrvSum += metrics.hrv;
         cycleAccumulators.current.hrvCount += 1;
+      }
+      // Keep the most-recent valid CHROM window as the cycle's pulse snapshot.
+      if (metrics.pulseSignal && metrics.pulseSignal.length > 0) {
+        cycleAccumulators.current.lastPulseSignal = metrics.pulseSignal;
       }
     }
 
@@ -199,6 +211,7 @@ export function useScanLifecycle(
           sqi: cycleSqi,
           bpmValid: cycleBpmValid,
           hrvValid: cycleHrvCount > 0,
+          pulseSignal: cycleAccumulators.current.lastPulseSignal,
         };
 
         const isValid = cycleSqi >= MIN_SQI_THRESHOLD && cycleBpmValid;
@@ -263,9 +276,9 @@ export function useScanLifecycle(
       ).length;
       const extraNote = newDiscardedCount > 0 || bpmInvalidCount > 0
         ? ` (${[
-            newDiscardedCount > 0 ? `${newDiscardedCount} discarded for low signal quality` : '',
-            bpmInvalidCount > 0 ? `${bpmInvalidCount} yielded no BPM peak` : '',
-          ].filter(Boolean).join(', ')})`
+          newDiscardedCount > 0 ? `${newDiscardedCount} discarded for low signal quality` : '',
+          bpmInvalidCount > 0 ? `${bpmInvalidCount} yielded no BPM peak` : '',
+        ].filter(Boolean).join(', ')})`
         : '';
       setCycleLabel(`${newValidCount} of ${newTotalCount} cycles${extraNote}`);
 
@@ -283,8 +296,10 @@ export function useScanLifecycle(
       asymmetrySum: [0, 0, 0, 0, 0],
       sqiSum: 0,
       bpmCount: 0,
+      hrvCount: 0,
       respRateCount: 0,
       sqiCount: 0,
+      lastPulseSignal: [],
     };
     setCurrentCycle((c) => c + 1);
   }, [status, timeRemaining]);
@@ -308,9 +323,9 @@ export function useScanLifecycle(
    */
   function computeFinalResults(cycles: CycleResult[], reachedTarget: boolean) {
     // Split cycles into three buckets for diagnostics
-    const sqiDiscarded  = cycles.filter((c) => c.sqi < MIN_SQI_THRESHOLD);
-    const bpmInvalid    = cycles.filter((c) => c.sqi >= MIN_SQI_THRESHOLD && !c.bpmValid);
-    const usableCycles  = cycles.filter((c) => c.sqi >= MIN_SQI_THRESHOLD && c.bpmValid);
+    const sqiDiscarded = cycles.filter((c) => c.sqi < MIN_SQI_THRESHOLD);
+    const bpmInvalid = cycles.filter((c) => c.sqi >= MIN_SQI_THRESHOLD && !c.bpmValid);
+    const usableCycles = cycles.filter((c) => c.sqi >= MIN_SQI_THRESHOLD && c.bpmValid);
 
     // ── Per-cycle diagnostic log ────────────────────────────────────────────
     // Log every cycle so we can verify whether outlier cycles are actually the
@@ -318,7 +333,7 @@ export function useScanLifecycle(
     cycles.forEach((c, idx) => {
       const status =
         c.sqi < MIN_SQI_THRESHOLD ? 'SQI-REJECTED' :
-        !c.bpmValid               ? 'BPM-INVALID'  : 'USABLE';
+          !c.bpmValid ? 'BPM-INVALID' : 'USABLE';
       console.log(
         `[Scan] Cycle ${idx + 1} — BPM=${c.bpm.toFixed(1)} ` +
         `HRV=${c.hrv.toFixed(1)} ` +
@@ -353,6 +368,7 @@ export function useScanLifecycle(
         hrvValid: false,
         allRejected: allSqiFailed,
         weakSignal: !allSqiFailed,
+        pulseSignal: [],
       });
       return;
     }
@@ -461,6 +477,9 @@ export function useScanLifecycle(
       // weakSignal = true when we're showing a result from fewer than the
       // target number of valid cycles (hit hard cap) — prompt user to retry.
       weakSignal: !reachedTarget,
+      // Concatenate pulse signals from retained cycles in order.
+      // Each cycle contributes its last valid CHROM window (the full FFT window).
+      pulseSignal: retainedCycles.flatMap((c) => c.pulseSignal),
     });
   }
 

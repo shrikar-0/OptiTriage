@@ -122,6 +122,7 @@ export default function Dashboard({
             ewsScore:           payload['ewsScore']           as number,
             totalCycles:        payload['totalCycles']        as number | undefined,
             discardedCycles:    payload['discardedCycles']    as number | undefined,
+            pulseSignal:        (payload['pulseSignal'] as number[] | undefined) ?? [],
           },
           isScanning: false,
         };

@@ -39,6 +39,7 @@ export default function PatientFlow() {
                     respiratoryRate: r.finalResults.respRate ? Math.round(r.finalResults.respRate) : 0, // Backend validation expects min 5, but we can send what we have or a default if null
                     motionAsymmetryFlag: r.lowConsistencyFlag,
                     ewsScore: 0, // The backend computes the final NEWS2 score, but schema requires this. We will send 0 and let backend recompute if needed, actually the VitalsSchema has ewsScore.
+                    pulseSignal: r.finalResults?.pulseSignal ?? [],
                   };
                   // We should ensure respiratoryRate is at least 5 to pass Zod schema
                   if (vitalsPayload.respiratoryRate < 5) vitalsPayload.respiratoryRate = 5;

@@ -15,6 +15,8 @@ export interface ScanMetrics {
   ewsScore: number;
   totalCycles?: number;
   discardedCycles?: number;
+  /** Raw CHROM pulse waveform samples from the completed scan. */
+  pulseSignal?: number[];
 }
 
 /** One entry in the live triage queue — scanning in-progress or scan-complete. */
