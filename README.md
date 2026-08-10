@@ -30,33 +30,25 @@ Zero raw video ever leaves the patient's browser.
 
 ---
 
-## Live Demo
-
-| App | URL |
-|---|---|
-| 🧑‍⚕️ Doctor / Receptionist Dashboard | *(deploy link)* |
-| 📱 Patient Scan Client | *(deploy link)* |
-
----
 
 ## How It Works
 
 ```
 Receptionist                Patient Browser              Doctor Dashboard
      │                           │                              │
-     │  Generate Scan Link        │                              │
+     │  Generate Scan Link        │                             │
      │──────────────────▶ SMS / WhatsApp                        │
      │                           │                              │
      │                    Opens scan link                       │
      │                           │                              │
      │                    ┌──────▼──────┐                       │
      │                    │  MediaPipe  │                       │
-     │                    │ Face Mesh   │ 468 landmarks          │
+     │                    │ Face Mesh   │ 468 landmarks         │
      │                    └──────┬──────┘                       │
      │                           │                              │
      │                    ┌──────▼──────┐                       │
-     │                    │    CHROM    │ R/G + G/B ratios       │
-     │                    │  Algorithm  │ cancels melanin bias   │
+     │                    │    CHROM    │ R/G + G/B ratios      │
+     │                    │  Algorithm  │ cancels melanin bias  │
      │                    └──────┬──────┘                       │
      │                           │                              │
      │                    ┌──────▼──────┐                       │
@@ -65,8 +57,8 @@ Receptionist                Patient Browser              Doctor Dashboard
      │                    └──────┬──────┘                       │
      │                           │                              │
      │                    ┌──────▼──────┐                       │
-     │                    │  4 × 20s    │ SQI-weighted avg       │
-     │                    │   Cycles    │ stable final result    │
+     │                    │  4 × 20s    │ SQI-weighted avg      │
+     │                    │   Cycles    │ stable final result   │
      │                    └──────┬──────┘                       │
      │                           │                              │
      │                    Final numeric payload only            │
@@ -136,17 +128,17 @@ Receptionist                Patient Browser              Doctor Dashboard
 ┌─────────────────────────────────────────────────────────────────┐
 │                     PATIENT'S BROWSER                           │
 │                                                                 │
-│  Camera → MediaPipe → Skin ROI ─→ CHROM/EVM ─→ FFT → BPM/HRV  │
+│  Camera → MediaPipe → Skin ROI ─→ CHROM/EVM ─→ FFT → BPM/HRV    │
 │                    → Motion ROI → Optical Flow → Resp Rate      │
 │                                                                 │
-│  SQI Gate → Multi-Cycle Averaging → Risk Classifier            │
+│  SQI Gate → Multi-Cycle Averaging → Risk Classifier             │
 │                                                                 │
-│  ← No video leaves this boundary →                             │
+│  ← No video leaves this boundary →                              │
 └──────────────────────┬──────────────────────────────────────────┘
                        │ { bpm, hrv, respRate, ewsScore, sessionId }
                        │ Socket.io (encrypted)
 ┌──────────────────────▼──────────────────────────────────────────┐
-│                     NODE.JS API                                  │
+│                     NODE.JS API                                 │
 │  JWT verification → Payload guard → NEWS2 scoring               │
 │  Prisma write → Socket.io broadcast to doctor                   │
 └──────────────────────┬──────────────────────────────────────────┘
