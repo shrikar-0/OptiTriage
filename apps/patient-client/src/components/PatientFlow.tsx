@@ -16,7 +16,7 @@ export default function PatientFlow() {
   }>({ finalResults: null, lowConsistencyFlag: false });
 
   return (
-    <div className="mx-auto w-full max-w-md">
+    <div className="mx-auto w-full max-w-none">
       {stage === 'consent' && <ConsentScreen onBegin={() => setStage('scanning')} />}
 
       {stage === 'scanning' && (
