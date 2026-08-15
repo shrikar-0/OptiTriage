@@ -1,4 +1,4 @@
-import React from 'react';
+
 import nurseImg from '../../assets/nurse_transparent.png';
 import receptionistImg from '../../assets/receptionist_transparent.png';
 import AmbientBackground from './AmbientBackground';

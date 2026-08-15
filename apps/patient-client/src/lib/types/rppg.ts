@@ -1,4 +1,4 @@
-import type { HrvRejectionReason, HrvResult } from '../rppg/hrv';
+import type { HrvRejectionReason } from '../rppg/hrv';
 
 export interface RppgHrvDiag {
   signalLength?: number;
