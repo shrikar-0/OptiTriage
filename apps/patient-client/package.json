@@ -17,6 +17,7 @@
     "@optitriage/shared": "workspace:*",
     "@techstark/opencv-js": "5.0.0-release.1",
     "fft.js": "^4.0.4",
+    "lucide-react": "^1.31.0",
     "onnxruntime-web": "^1.27.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
