@@ -20,17 +20,19 @@ import qrcode from 'qrcode-terminal';
 // ─── Client singleton ─────────────────────────────────────────────────────────
 
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
+  authStrategy: new LocalAuth({
+    dataPath: './whatsapp-session', // single named folder, not scattered files
+  }),
   puppeteer: {
     headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
       '--disable-gpu',
+      '--aggressive-cache-discard',
+      '--disable-cache',
+      '--disable-application-cache',
     ],
   },
 });

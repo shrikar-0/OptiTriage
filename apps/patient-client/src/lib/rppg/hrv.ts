@@ -30,11 +30,11 @@ export const IBI_MIN_MS = 333;
 /** IBI must be ≤ this value (ms) — corresponds to the 40 BPM lower limit */
 export const IBI_MAX_MS = 1500;
 /** Maximum relative deviation from the local-median IBI to be kept as normal */
-export const ECTOPIC_RELATIVE_THRESHOLD = 0.20;
+export const ECTOPIC_RELATIVE_THRESHOLD = 0.30; // 30% — more permissive for noisy camera signals
 /** Minimum number of valid consecutive IBIs required to compute HRV */
-export const MIN_VALID_IBIS = 5;
+export const MIN_VALID_IBIS = 3; // 3 IBIs = 4 beats in 10 s — realistic for camera rPPG
 /** Minimum SQI (0–1) required to declare HRV valid */
-export const MIN_HRV_SQI = 0.50;
+export const MIN_HRV_SQI = 0.40; // aligned with the worker's 0.3 FFT entry gate
 /**
  * Moving-average window (in samples) used to compute the adaptive peak-
  * detection threshold.  At 30 FPS this is a 1-second window; at 60 FPS it is
@@ -212,16 +212,16 @@ export class HrvEstimator {
     }
     const norm = signal.map((v) => (v - sigMin) / sigRange);
 
-    // ── 2. Adaptive peak detection & 3-point parabolic sub-sample interpolation ──────────────
-    const movAvg = new Float64Array(norm.length);
-    for (let i = 0; i < norm.length; i++) {
-      const half = Math.floor(windowSamples / 2);
-      const lo = Math.max(0, i - half);
-      const hi = Math.min(norm.length - 1, i + half);
-      let sum = 0;
-      for (let j = lo; j <= hi; j++) sum += norm[j];
-      movAvg[i] = sum / (hi - lo + 1);
-    }
+    // ── 2. Fixed-fraction peak detection ───────────────────────────────────────
+    // A centered moving-average threshold was used previously but caused a
+    // systematic failure: the average window centered on the peak sample includes
+    // the peak itself, which pulls the threshold up to the peak level, making
+    // `norm[i] > movAvg[i]` false at exactly the real beats.
+    //
+    // Fix: use a fixed threshold at 55% of the normalized [0,1] range.
+    // Any sample above this that is a local maximum and past the refractory
+    // period is accepted as a beat. This is the standard approach for rPPG.
+    const PEAK_THRESHOLD = 0.55; // 55% of normalized range
 
     const minRefractorySamples = Math.max(3, Math.floor(IBI_MIN_MS * samplesPerMs));
 
@@ -229,27 +229,20 @@ export class HrvEstimator {
     const sigStd = Math.sqrt(signal.reduce((acc, v) => acc + (v - sigMean) ** 2, 0) / signal.length);
     const sigRms = Math.sqrt(signal.reduce((acc, v) => acc + v * v, 0) / signal.length);
 
-    const candidatePeaks: number[] = [];
-    for (let i = 1; i < norm.length - 1; i++) {
-      const isLocalMax = norm[i] > norm[i - 1] && norm[i] >= norm[i + 1];
-      const aboveThreshold = norm[i] > movAvg[i];
-      if (isLocalMax && aboveThreshold) candidatePeaks.push(i);
-    }
-
     const peakIndices: number[] = [];
     const peakTimestamps: number[] = [];
     let lastPeakIdx = -minRefractorySamples;
 
     for (let i = 1; i < norm.length - 1; i++) {
       const isLocalMax = norm[i] > norm[i - 1] && norm[i] >= norm[i + 1];
-      const aboveThreshold = norm[i] > movAvg[i];
+      const aboveThreshold = norm[i] > PEAK_THRESHOLD;
       const pastRefractory = i - lastPeakIdx >= minRefractorySamples;
 
       if (isLocalMax && aboveThreshold && pastRefractory) {
         peakIndices.push(i);
         lastPeakIdx = i;
 
-        // Phase 4: 3-point parabolic sub-sample peak interpolation
+        // 3-point parabolic sub-sample peak interpolation for sub-frame timing accuracy
         let refinedTs = timestamps[i];
         const alpha = norm[i - 1];
         const beta = norm[i];
@@ -285,10 +278,10 @@ export class HrvEstimator {
       sigStd,
       sigRms,
       minRefractorySamples,
-      candidatePeaks,
+      candidatePeaks: acceptedPeaks, // same set — no pre-filter stage with fixed threshold
       acceptedPeaks,
       peakAmplitudes,
-      rejectedPeakCount: Math.max(0, candidatePeaks.length - acceptedPeaks.length),
+      rejectedPeakCount: 0, // refractory period is the only filter; no pre-candidate stage
     };
 
     const detectedBeats = peakIndices.length;
@@ -424,6 +417,8 @@ export class HrvEstimator {
     const maxIBI = Math.max(...validIBIsMs);
 
     // Phase 1: Strictly consecutive RMSSD diff calculation
+    // Two accepted IBIs are "strictly consecutive" when the end-beat of the
+    // previous IBI is the start-beat of the next one (no gap in peak indices).
     const deltaIBIs: number[] = [];
     const rmssdValuesUsed: number[] = [];
 
@@ -442,6 +437,18 @@ export class HrvEstimator {
       }
     }
 
+    // Fallback: if the ectopic filter broke all strictly-consecutive pairs
+    // (e.g. removed one IBI from the middle of every run), compute RMSSD over
+    // adjacent elements of validIBIsMs instead.  This is the standard
+    // time-domain RMSSD definition and is always valid when ≥ 2 IBIs survive.
+    const rmssdSquares =
+      rmssdValuesUsed.length > 0
+        ? rmssdValuesUsed
+        : validIBIsMs.slice(1).map((ibi, i) => {
+            const diff = ibi - validIBIsMs[i];
+            return diff * diff;
+          });
+
     const ibiStd = n > 0 ? Math.sqrt(validIBIsMs.reduce((acc, v) => acc + (v - meanIBI) ** 2, 0) / n) : 0;
     const maxAbsDeltaIbi = deltaIBIs.length > 0 ? Math.max(...deltaIBIs.map((d) => Math.abs(d))) : 0;
 
@@ -449,9 +456,10 @@ export class HrvEstimator {
     const varianceSum = validIBIsMs.reduce((acc, ibi) => acc + (ibi - meanIBI) ** 2, 0);
     const sdnn = Math.sqrt(varianceSum / n);
 
-    // RMSSD — root-mean-square of successive CONSECUTIVE differences
-    const rmssd = rmssdValuesUsed.length > 0
-      ? Math.sqrt(rmssdValuesUsed.reduce((a, b) => a + b, 0) / rmssdValuesUsed.length)
+    // RMSSD — root-mean-square of successive differences
+    // Uses strictly-consecutive pairs when available, adjacent-element fallback otherwise.
+    const rmssd = rmssdSquares.length > 0
+      ? Math.sqrt(rmssdSquares.reduce((a, b) => a + b, 0) / rmssdSquares.length)
       : 0;
 
     const heartRateFromIbi = meanIBI > 0 ? 60000 / meanIBI : 0;

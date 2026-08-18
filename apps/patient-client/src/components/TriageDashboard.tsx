@@ -182,7 +182,7 @@ export function TriageDashboard({
         {/* Right Column: Metrics Grid */}
         <div className="grid grid-cols-2 gap-4">
           <MetricCard label="Heart Rate" value={displayVal(bpm ? Math.round(bpm) : null)} unit="BPM" />
-          <MetricCard label="HRV" value={displayVal(hrv ? Math.round(hrv) : null)} unit="ms" />
+          <MetricCard label="HRV" value={displayVal(hrv !== null ? Math.round(hrv) : null)} unit="ms" />
           <MetricCard label="Resp Rate" value={displayVal(respRate ? Math.round(respRate) : null)} unit="BrPM" />
           <MetricCard label="Asymmetry" value={displayVal(asymmetry ? Math.round(asymmetry * 100) : null)} unit="%" />
         </div>
