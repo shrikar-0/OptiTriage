@@ -150,20 +150,8 @@ export default function VitalsPanel({ vitals }: VitalsPanelProps) {
       : `${Math.floor(elapsedSec / 60)}m ${elapsedSec % 60}s ago`;
 
   const secondaryMetrics = [
-    {
-      label: 'HRV',
-      icon: 'vital_signs',
-      value: vitals.hrv > 0 ? vitals.hrv : null,
-      unit: 'ms',
-      nullLabel: '--',
-    },
-    {
-      label: 'Respiratory Rate',
-      icon: 'air',
-      value: vitals.respRate > 0 ? vitals.respRate : null,
-      unit: 'br/min',
-      nullLabel: '--',
-    },
+    { label: 'HRV',              icon: 'vital_signs', value: vitals.hrv,      unit: 'ms'     },
+    { label: 'Respiratory Rate', icon: 'air',         value: vitals.respRate, unit: 'br/min' },
   ];
 
   const signalColor =
@@ -243,14 +231,8 @@ export default function VitalsPanel({ vitals }: VitalsPanelProps) {
                 <span className="text-xs font-semibold uppercase tracking-wider">{m.label}</span>
               </div>
               <div className="flex items-baseline gap-1">
-                {m.value !== null ? (
-                  <>
-                    <span className="font-bold text-4xl leading-none" style={{ color: '#2C3E35' }}>{m.value}</span>
-                    <span className="text-xs" style={{ color: '#7A8C85' }}>{m.unit}</span>
-                  </>
-                ) : (
-                  <span className="font-bold text-4xl leading-none" style={{ color: '#B0BCB6' }}>--</span>
-                )}
+                <span className="font-bold text-4xl leading-none" style={{ color: '#2C3E35' }}>{m.value}</span>
+                <span className="text-xs" style={{ color: '#7A8C85' }}>{m.unit}</span>
               </div>
               <svg className="absolute bottom-0 right-0 w-24 h-10 opacity-40" viewBox="0 0 100 30" preserveAspectRatio="none">
                 <path d="M0,15 Q15,20 30,10 T60,25 T90,15 T100,10" fill="none" stroke="#96AB88" strokeWidth="2" />

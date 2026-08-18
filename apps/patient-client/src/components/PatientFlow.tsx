@@ -25,7 +25,7 @@ export default function PatientFlow() {
             setScanResult(r);
             setStage('results');
             
-            if (r.finalResults && !r.finalResults.allRejected) {
+            if (r.finalResults && !r.finalResults.allRejected && !r.finalResults.weakSignal) {
               const urlParams = new URLSearchParams(window.location.search);
               const token = urlParams.get('token');
               if (token) {
@@ -35,14 +35,13 @@ export default function PatientFlow() {
                     sessionId: payload.sessionId,
                     timestamp: Date.now(),
                     bpm: Math.round(r.finalResults.bpm),
-                    // Send real RMSSD when valid; 0 signals "not computed" to the dashboard
-                    hrv: r.finalResults.hrvValid ? Math.round(r.finalResults.hrv) : 0,
-                    respiratoryRate: r.finalResults.respRate ? Math.round(r.finalResults.respRate) : 0,
+                    hrv: Math.round(r.finalResults.hrv),
+                    respiratoryRate: r.finalResults.respRate ? Math.round(r.finalResults.respRate) : 0, // Backend validation expects min 5, but we can send what we have or a default if null
                     motionAsymmetryFlag: r.lowConsistencyFlag,
-                    ewsScore: 0,
+                    ewsScore: 0, // The backend computes the final NEWS2 score, but schema requires this. We will send 0 and let backend recompute if needed, actually the VitalsSchema has ewsScore.
                     pulseSignal: r.finalResults?.pulseSignal ?? [],
                   };
-                  // Ensure respiratoryRate meets Zod minimum of 5
+                  // We should ensure respiratoryRate is at least 5 to pass Zod schema
                   if (vitalsPayload.respiratoryRate < 5) vitalsPayload.respiratoryRate = 5;
                   
                   console.log('[Patient] Sending final vitals:', vitalsPayload, 'sessionId:', payload.sessionId);
