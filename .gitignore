@@ -39,11 +39,8 @@ apps/patient-client/public/*.task
 apps/patient-client/public/vision_wasm_internal.js
 apps/patient-client/public/vision_wasm_module_internal.js
 apps/patient-client/public/vision_wasm_nosimd_internal.js
-apps/api/.webjs_auth/ 
-node_modules/ 
-.env 
 
-.env.* 
-!.env.example 
-apps/api/.webjs_auth/
-apps/api/.wwebjs_auth/
+# WhatsApp Web session & cache — runtime data, never committed
+whatsapp-session/
+.wwebjs_auth/
+.wwebjs_cache/
