@@ -117,10 +117,10 @@ export function useMotionWorker(
 
   // ── rAF frame-dispatch loop ──────────────────────────────────────────────
   const processFrame = useCallback(async () => {
-    const videoElement =
-      videoRefOrElement && 'current' in videoRefOrElement
-        ? videoRefOrElement.current
-        : videoRefOrElement;
+    const videoElement: HTMLVideoElement | null =
+  videoRefOrElement instanceof HTMLVideoElement
+    ? videoRefOrElement
+    : videoRefOrElement?.current ?? null;
     const roi = latestRoiRef.current;
     const sqi = latestSqiRef.current;
 
