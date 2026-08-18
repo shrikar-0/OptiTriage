@@ -39,3 +39,8 @@ apps/patient-client/public/*.task
 apps/patient-client/public/vision_wasm_internal.js
 apps/patient-client/public/vision_wasm_module_internal.js
 apps/patient-client/public/vision_wasm_nosimd_internal.js
+
+# WhatsApp Web session & cache — runtime data, never committed
+whatsapp-session/
+.wwebjs_auth/
+.wwebjs_cache/
