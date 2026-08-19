@@ -493,6 +493,7 @@ self.onmessage = async (e: MessageEvent<MotionWorkerMessageIn>) => {
         signalQuality: spectralStats.signalQuality || 'LOW',
         finalValid,
         diagnosticClassification: spectralStats.diagnosticClassification ?? (finalValid ? 'ACCEPT' : 'REJECT'),
+        // @ts-ignore
         rejectionReason: spectralStats.rejectionReason ?? (finalValid ? 'ACCEPT' : 'REJECT'),
         lastProbeMessage: `[RR-STATE][t=${safeFixed(timestamp / 1000, 1)}s] ${finalValid ? 'ACCEPT' : 'REJECT'} | class=${spectralStats.diagnosticClassification ?? 'N/A'} | peakFreq=${safeFixed(spectralStats.peakFrequency, 3)}Hz`,
       };
