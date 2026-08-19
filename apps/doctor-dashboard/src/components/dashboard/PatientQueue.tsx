@@ -8,8 +8,9 @@ const BAND_COLORS: Record<'green' | 'yellow' | 'red', string> = {
   green:  '#96AB88',
 };
 
-function relativeTime(capturedAt: number): string {
-  const diffSec = Math.floor((Date.now() - capturedAt) / 1000);
+function relativeTime(ts: number | string): string {
+  const ms = typeof ts === 'string' ? new Date(ts).getTime() : ts;
+  const diffSec = Math.floor((Date.now() - ms) / 1000);
   if (diffSec < 90)   return 'Just now';
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
   return `${Math.floor(diffSec / 3600)} hr ago`;

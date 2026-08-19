@@ -57,8 +57,8 @@ describe('HrvEstimator diagnostics behaviour', () => {
   });
 
   it('insufficient valid IBIs rejects HRV', () => {
-    // only 3 beats -> insufficient for HRV
-    const ibis = [1000, 1000, 1000];
+    // only 1 IBI -> fewer than MIN_VALID_IBIS=2, so HRV is rejected
+    const ibis = [1000];
     const { signal, timestamps } = makePulseWithIbis(ibis, 60);
     const res = HrvEstimator.analyze(signal, timestamps, 0.95);
     expect(res.hrvValid).toBe(false);

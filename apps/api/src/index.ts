@@ -37,7 +37,8 @@ import { disconnectPrisma, getPrismaClient, checkDbConnection } from './db/prism
 import { supabaseAdmin } from './lib/supabaseAdmin';
 import { getEwsRiskBand } from '@optitriage/shared';
 import type { TriagePayload } from '@optitriage/shared';
-import { initWhatsApp, destroyWhatsApp } from './lib/smsGateway';
+import { initWhatsApp, destroyWhatsApp, sendHealthSummary } from './lib/smsGateway';
+import { generateVitalsSummary } from './lib/geminiSummary';
 
 // ─── Express App ──────────────────────────────────────────────────────────────
 
@@ -304,6 +305,38 @@ triageNs.on('connection', (socket) => {
 
     // ── Persist scan (fire-and-forget; no-ops if DB unavailable) ──────────
     void persistScan(sessionId, vitals, news2);
+
+    // ── WhatsApp results delivery (fire-and-forget; isolated from vitals flow) ─
+    // Only runs once per session (first vitals packet) to avoid duplicate sends.
+    void (async () => {
+      try {
+        const sessionRecord = sessionStore.get(sessionId);
+        const phone = sessionRecord?.patientPhone;
+        const language = sessionRecord?.preferredLanguage ?? 'en';
+
+        // Build the Gemini input from computed values
+        const summaryInput = {
+          bpm: vitals.bpm,
+          hrv: vitals.hrv,
+          respRate: vitals.respiratoryRate,
+          ewsScore: vitals.ewsScore,
+          news2Category: news2.riskBand,
+        };
+
+        console.log('[Gemini] Calling with language:', language,
+          '| preferredLanguage from store:', sessionRecord?.preferredLanguage,
+          '| from session:', sessionId);
+        const aiSummary = await generateVitalsSummary(summaryInput, language);
+        const sent = await sendHealthSummary(phone, aiSummary);
+
+        if (phone) {
+          console.log(`[vitals] WhatsApp summary ${sent ? 'sent' : 'skipped (not ready)'} for session ${sessionId}`);
+        }
+      } catch (err) {
+        // Never let WhatsApp/Gemini errors surface into the vitals flow
+        console.error('[vitals] WhatsApp summary delivery failed (non-fatal):', (err as Error).message);
+      }
+    })();
 
     // ── Broadcast to doctor room with EWS risk band + NEWS2 summary ────────
     // ewsScore was validated by Zod; getEwsRiskBand is a pure function.

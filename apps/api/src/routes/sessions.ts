@@ -47,6 +47,7 @@ export function createSessionsRouter(io: SocketIOServer): Router {
       .optional(),
     patientName: z.string().min(1, 'patientName is required'),
     patientAge: z.number().int().positive().optional(),
+    preferredLanguage: z.string().min(2).max(5).optional().default('en'),
   });
 
   // ─── Route handler ─────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ export function createSessionsRouter(io: SocketIOServer): Router {
         return;
       }
 
-      const { patientPhone, patientName, patientAge } = parsed.data;
+      const { patientPhone, patientName, patientAge, preferredLanguage } = parsed.data;
       const staffUser = res.locals.staffUser;
 
       // 2. Create session
@@ -82,6 +83,7 @@ export function createSessionsRouter(io: SocketIOServer): Router {
         expiresAt: new Date(expiresAt),
         patientName,
         patientAge,
+        preferredLanguage,
       });
 
       // 4. Persist session metadata in-memory (for JWT validation)
@@ -89,6 +91,8 @@ export function createSessionsRouter(io: SocketIOServer): Router {
         sessionId,
         doctorId: staffUser.userId,
         expiresAt,
+        patientPhone: patientPhone,
+        preferredLanguage,
       });
 
       // 5. Emit session:created to /triage namespace

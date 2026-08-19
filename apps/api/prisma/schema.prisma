@@ -61,23 +61,26 @@ model Staff {
 ///     The patient's phone number is NEVER persisted anywhere in the system —
 ///     it is discarded immediately after the SMS dispatch in sessions.ts.
 model DoctorSession {
-  id          String        @id @default(uuid()) @db.Uuid
+  id                String        @id @default(uuid()) @db.Uuid
   /// Opaque UUID identifying the doctor — sourced from their JWT claim.
   /// Not a foreign key to a DoctorAuth table in this phase (added later).
-  doctorId    String        @db.Uuid
-  status      SessionStatus @default(WAITING)
-  expiresAt   DateTime
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  doctorId          String        @db.Uuid
+  status            SessionStatus @default(WAITING)
+  expiresAt         DateTime
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   /// Patient display name — collected at intake, not treated as sensitive PHI.
   /// Phone number is NEVER stored (see privacy constraint in sessions.ts).
-  patientName String?
+  patientName       String?
   /// Patient age in years — used for NEWS2 context display in the queue.
-  patientAge  Int?
+  patientAge        Int?
+  /// BCP-47 language code for the Gemini AI WhatsApp results summary.
+  /// Collected at intake by the receptionist. Default: "en" (English).
+  preferredLanguage String        @default("en")
 
   /// All patient scan snapshots captured within this session.
-  scans       PatientScan[]
+  scans             PatientScan[]
 
   @@index([doctorId, status])
   @@index([expiresAt])

@@ -69,7 +69,22 @@ export default function Dashboard({
 
         const data = (await res.json()) as { sessions: QueueItem[] };
         setSessions(
-          sortSessions((data.sessions ?? []).map((s) => ({ ...s, isScanning: s.sessionStatus === 'SCANNING' }))),
+          sortSessions((data.sessions ?? []).map((s) => {
+            // Prisma DateTime fields arrive as ISO-8601 strings over JSON.
+            // Normalise to Unix ms so all downstream time arithmetic is correct.
+            const parseTs = (v: unknown): number =>
+              typeof v === 'number' ? v
+              : typeof v === 'string' ? new Date(v).getTime()
+              : v instanceof Date ? (v as Date).getTime()
+              : Date.now();
+
+            return {
+              ...s,
+              createdAt:  parseTs(s.createdAt),
+              capturedAt: s.capturedAt != null ? parseTs(s.capturedAt) : null,
+              isScanning: s.sessionStatus === 'SCANNING',
+            };
+          })),
         );
       } catch (err) {
         console.warn('[Dashboard] Queue fetch failed:', (err as Error).message);

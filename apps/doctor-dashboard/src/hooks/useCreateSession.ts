@@ -19,7 +19,7 @@ export type SessionFormState =
 export interface UseCreateSessionReturn {
   state: SessionFormState;
   /** Submit a session-creation request. */
-  submit: (phone: string | undefined, name: string, age: number | undefined, doctorToken: string) => Promise<{ok: boolean, data?: CreateSessionSuccess}>;
+  submit: (phone: string | undefined, name: string, age: number | undefined, doctorToken: string, language?: string) => Promise<{ok: boolean, data?: CreateSessionSuccess}>;
   /** Reset back to idle so the form can be reused. */
   reset: () => void;
 }
@@ -27,10 +27,10 @@ export interface UseCreateSessionReturn {
 export function useCreateSession(): UseCreateSessionReturn {
   const [state, setState] = useState<SessionFormState>({ status: 'idle' });
 
-  const submit = useCallback(async (phone: string | undefined, name: string, age: number | undefined, doctorToken: string) => {
+  const submit = useCallback(async (phone: string | undefined, name: string, age: number | undefined, doctorToken: string, language?: string) => {
     setState({ status: 'loading' });
 
-    const result = await createSession(phone, name, age, doctorToken);
+    const result = await createSession(phone, name, age, doctorToken, language);
 
     if (result.ok) {
       setState({ status: 'success', data: result.data });

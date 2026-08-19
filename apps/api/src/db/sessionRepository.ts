@@ -18,6 +18,7 @@ export interface CreateSessionParams {
   expiresAt: Date;
   patientName?: string;
   patientAge?: number;
+  preferredLanguage?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export async function createSession(
         expiresAt: params.expiresAt,
         patientName: params.patientName,
         patientAge: params.patientAge,
+        preferredLanguage: params.preferredLanguage ?? 'en',
         status: 'WAITING',
       },
     });

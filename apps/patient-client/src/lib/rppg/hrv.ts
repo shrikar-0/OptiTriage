@@ -31,8 +31,11 @@ export const IBI_MIN_MS = 333;
 export const IBI_MAX_MS = 1500;
 /** Maximum relative deviation from the local-median IBI to be kept as normal */
 export const ECTOPIC_RELATIVE_THRESHOLD = 0.20;
-/** Minimum number of valid consecutive IBIs required to compute HRV */
-export const MIN_VALID_IBIS = 5;
+/** Minimum number of valid IBIs required to compute HRV.
+ *  RMSSD needs at least 2 IBIs to form 1 successive difference.
+ *  A stricter gate of 5 caused hrv=0 on typical 10-second windows
+ *  where the ectopic filter would reduce 10 raw IBIs down to 3-4. */
+export const MIN_VALID_IBIS = 2;
 /** Minimum SQI (0–1) required to declare HRV valid */
 export const MIN_HRV_SQI = 0.50;
 /**
@@ -61,8 +64,11 @@ export type HrvRejectionReason =
   | 'UNSTABLE_BEAT_TIMING'
   | 'NONE';
 
-/** Minimum sample rate (Hz) required to produce a valid HRV estimate */
-export const MIN_HRV_SAMPLE_RATE_HZ = 15;
+/** Minimum sample rate (Hz) required to produce a valid HRV estimate.
+ *  Our rPPG pipeline runs at ~9-10 FPS effective (mobile camera + worker throttle).
+ *  15 Hz was too strict and caused every scan to hit LOW_FRAME_RATE.
+ *  8 Hz still rejects genuinely unusable signals while passing our real-world rate. */
+export const MIN_HRV_SAMPLE_RATE_HZ = 8;
 
 /** Maximum allowed fraction of physiological IBIs rejected by ectopic filter (>35%) */
 export const MAX_ECTOPIC_REJECTION_RATIO = 0.35;

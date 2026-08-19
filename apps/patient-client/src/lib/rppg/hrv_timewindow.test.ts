@@ -44,8 +44,8 @@ describe('HrvEstimator time-window behaviour', () => {
     expect(res.detectedBeats).toBeGreaterThanOrEqual(6);
   });
 
-  it('rejects at 14.9 FPS with LOW_FRAME_RATE', () => {
-    const { signal, timestamps } = makePulseSequence(14.9, 10, 1000);
+  it('rejects at 7.9 FPS with LOW_FRAME_RATE', () => {
+    const { signal, timestamps } = makePulseSequence(7.9, 10, 1000);
     const res = HrvEstimator.analyze(signal, timestamps, 0.95);
     expect(res).toBeDefined();
     expect(res.hrvValid).toBe(false);
@@ -56,8 +56,8 @@ describe('HrvEstimator time-window behaviour', () => {
     expect(res.diag).toBeDefined();
   });
 
-  it('rejects at 8 FPS with LOW_FRAME_RATE while preserving diagnostics', () => {
-    const { signal, timestamps } = makePulseSequence(8, 10, 1000);
+  it('rejects at 7 FPS with LOW_FRAME_RATE while preserving diagnostics', () => {
+    const { signal, timestamps } = makePulseSequence(7, 10, 1000);
     const res = HrvEstimator.analyze(signal, timestamps, 0.95);
     expect(res).toBeDefined();
     expect(res.hrvValid).toBe(false);
@@ -66,7 +66,7 @@ describe('HrvEstimator time-window behaviour', () => {
     expect(res.sdnn).toBe(0);
     expect(res.heartRateFromIbi).toBe(0);
     expect(res.diag).toBeDefined();
-    expect(Math.round(res.diag!.effectiveSampleRateHz)).toBeCloseTo(8, 0);
+    expect(Math.round(res.diag!.effectiveSampleRateHz)).toBeCloseTo(7, 0);
     expect(res.detectedBeats).toBeGreaterThan(0);
     expect(res.rawIBIsMs.length).toBeGreaterThan(0);
   });
@@ -84,9 +84,9 @@ describe('HrvEstimator time-window behaviour', () => {
     expect(res.diag?.effectiveSampleRateHz).toBeLessThan(5);
   });
 
-  it('rejects irregular timestamps whose measured effective FPS is below 15 with LOW_FRAME_RATE', () => {
-    // 10 FPS with jitter -> ~10 Hz average
-    const fps = 10;
+  it('rejects irregular timestamps whose measured effective FPS is below 8 with LOW_FRAME_RATE', () => {
+    // 7 FPS with jitter -> ~7 Hz average
+    const fps = 7;
     const dt = 1000 / fps;
     const durationSec = 10;
     const signal: number[] = [];
@@ -106,7 +106,7 @@ describe('HrvEstimator time-window behaviour', () => {
     expect(res.hrvValid).toBe(false);
     expect(res.rejectionReason).toBe('LOW_FRAME_RATE');
     expect(res.diag).toBeDefined();
-    expect(res.diag?.effectiveSampleRateHz).toBeLessThan(15);
+    expect(res.diag?.effectiveSampleRateHz).toBeLessThan(8);
   });
 
   it('returns INSUFFICIENT_DATA for very short signals', () => {

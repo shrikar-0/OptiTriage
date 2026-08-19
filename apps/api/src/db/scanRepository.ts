@@ -3,11 +3,9 @@
  *
  * Prisma repository for PatientScan records.
  *
- * ⚠️  DATA CONSTRAINT: The `metrics` JSONB column only ever contains the
- *     numeric fields from TriagePayload. Raw rPPG waveform samples and video
- *     frames are NEVER stored — this constraint is enforced by the caller
- *     (Zod validation + guardNumericPayload in the vitals pipeline) and
- *     documented in schema.prisma.
+ * The `metrics` JSONB column stores the numeric fields from TriagePayload
+ * plus the rPPG `pulseSignal` waveform array (used for dashboard replay).
+ * Raw video frames are NEVER stored.
  *
  * Every method gracefully returns null/empty if the Prisma client is
  * unavailable, allowing the server to run without a database in local dev.
@@ -27,6 +25,8 @@ export interface ScanMetrics {
   ewsScore: number;
   motionAsymmetryFlag: boolean;
   timestamp: number;
+  /** Raw CHROM pulse waveform samples — persisted for dashboard replay. */
+  pulseSignal?: number[];
 }
 
 /** Item returned by the triage queue query — one row per active session. */
@@ -73,6 +73,11 @@ export async function persistScan(
     ewsScore: vitals.ewsScore,
     motionAsymmetryFlag: vitals.motionAsymmetryFlag,
     timestamp: vitals.timestamp,
+    // Persist the rPPG waveform so the dashboard can replay it after a refresh.
+    // Only included when present (avoids storing empty arrays).
+    ...(vitals.pulseSignal && vitals.pulseSignal.length > 0
+      ? { pulseSignal: vitals.pulseSignal }
+      : {}),
   };
 
   // Map news2 colour band to Prisma enum

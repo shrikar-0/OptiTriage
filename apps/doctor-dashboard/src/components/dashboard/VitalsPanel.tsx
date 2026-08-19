@@ -30,9 +30,21 @@ export function vitalsFromQueueItem(item: QueueItem): VitalsFromSession | null {
     : discarded <= 1  ? 'Moderate'
     : 'Weak';
 
+  // capturedAt arrives as a Date ISO string from the DB path, or a number from
+  // the socket path. Normalise to Unix ms so time arithmetic never yields NaN.
+  const rawCapturedAt = item.capturedAt as unknown;
+  const capturedAtMs =
+    typeof rawCapturedAt === 'number'
+      ? rawCapturedAt
+      : rawCapturedAt instanceof Date
+        ? rawCapturedAt.getTime()
+        : typeof rawCapturedAt === 'string'
+          ? new Date(rawCapturedAt).getTime()
+          : Date.now();
+
   return {
     sessionId:         item.sessionId,
-    capturedAt:        item.capturedAt ?? Date.now(),
+    capturedAt:        capturedAtMs,
     bpm:               Math.round(bpm),
     hrv:               Math.round(hrv),
     respRate:          Math.round(respiratoryRate),
@@ -142,8 +154,11 @@ export default function VitalsPanel({ vitals }: VitalsPanelProps) {
     : vitals.ewsRiskBand === 'yellow' ? 'Medium Risk'
     : 'Low Risk';
 
-  // Session elapsed time
-  const elapsedSec = Math.floor((Date.now() - vitals.capturedAt) / 1000);
+  // Session elapsed time — capturedAt may arrive as an ISO string (DB path) or number (socket path)
+  const capturedAtMs = typeof vitals.capturedAt === 'string'
+    ? new Date(vitals.capturedAt as unknown as string).getTime()
+    : vitals.capturedAt;
+  const elapsedSec = Math.floor((Date.now() - capturedAtMs) / 1000);
   const sessionTime =
     elapsedSec < 60
       ? `${elapsedSec}s ago`
