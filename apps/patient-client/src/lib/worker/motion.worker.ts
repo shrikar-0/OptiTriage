@@ -59,7 +59,9 @@ async function initOpenCV(): Promise<void> {
     // 1. If instance is a Promise / Thenable, await it
     if (instance && typeof instance.then === 'function') {
       console.log(`[OPENCV-INIT][${workerInstanceId}] Awaiting instance Promise...`);
-      instance = await instance;
+      instance = await new Promise((resolve) => {
+        instance.then.call(instance, resolve);
+      });
     }
 
     // 2. If instance is a factory function, call it and await the returned Promise
