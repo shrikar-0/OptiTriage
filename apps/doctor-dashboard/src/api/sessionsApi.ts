@@ -21,6 +21,8 @@ export interface CreateSessionRequest {
   patientPhone?: string;
   patientName: string;
   patientAge?: number;
+  /** BCP-47 language code for the Gemini AI WhatsApp summary (e.g. "hi", "mr"). */
+  preferredLanguage?: string;
 }
 
 export interface CreateSessionSuccess {
@@ -55,6 +57,7 @@ export async function createSession(
   name: string,
   age: number | undefined,
   doctorToken: string,
+  language?: string,
 ): Promise<CreateSessionResult> {
   let response: Response;
 
@@ -65,7 +68,7 @@ export async function createSession(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${doctorToken}`,
       },
-      body: JSON.stringify({ patientPhone: phone || undefined, patientName: name, patientAge: age } satisfies CreateSessionRequest),
+      body: JSON.stringify({ patientPhone: phone || undefined, patientName: name, patientAge: age, preferredLanguage: language || 'en' } satisfies CreateSessionRequest),
     });
   } catch {
     return {

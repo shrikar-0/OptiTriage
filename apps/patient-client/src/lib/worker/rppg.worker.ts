@@ -368,6 +368,12 @@ self.onmessage = async (e: MessageEvent<RppgWorkerMessageIn>) => {
          workerFps = 1000 / ((workerProcessTimestamps[workerProcessTimestamps.length - 1] - workerProcessTimestamps[0]) / (workerProcessTimestamps.length - 1));
       }
 
+      // ── DIAGNOSTIC: log hrv value right before postMessage ────────────────
+      console.log('[HRV-PRE-POST] hrv=', hrv, '| hrvValid=', hrvValid, '| valid=', valid,
+        '| fftResult.hrv=', fftResult?.hrv ?? 'n/a',
+        '| rmssd=', fftResult?.hrvResult?.rmssd ?? 'n/a',
+        '| rejectionReason=', fftResult?.hrvResult?.rejectionReason ?? 'n/a');
+
       postMessage({
         type: 'METRICS',
         payload: {

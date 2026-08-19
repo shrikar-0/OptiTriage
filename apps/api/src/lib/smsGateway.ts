@@ -120,3 +120,37 @@ export async function sendScanLink(phone: string | undefined, scanUrl: string): 
     return false;
   }
 }
+
+/**
+ * Sends the Gemini AI health summary to the patient's WhatsApp number.
+ *
+ * @param phone    Raw phone string (e.g. "9876543210"). If falsy, silently skipped.
+ * @param summary  AI-generated (or fallback) health summary text.
+ * @returns        `true` if the message was dispatched, `false` otherwise.
+ */
+export async function sendHealthSummary(phone: string | undefined, summary: string): Promise<boolean> {
+  if (!phone) return false;
+
+  if (!_isReady) {
+    console.warn('[whatsapp] Client not ready — health summary skipped.');
+    return false;
+  }
+
+  try {
+    const digits = phone.replace(/\D/g, '');
+    const waNumber = digits.length === 10 ? `91${digits}` : digits;
+    const chatId = `${waNumber}@c.us`;
+
+    const message =
+      `🏥 *OptiTriage Health Summary*\n\n` +
+      `${summary}\n\n` +
+      `⚕️ _This is an AI-assisted summary. Please consult your doctor for medical advice._`;
+
+    await client.sendMessage(chatId, message);
+    console.log(`[whatsapp] ✓ Health summary dispatched to ${waNumber}`);
+    return true;
+  } catch (err) {
+    console.error('[whatsapp] Failed to send health summary:', (err as Error).message);
+    return false;
+  }
+}

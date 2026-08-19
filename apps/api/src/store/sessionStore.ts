@@ -11,8 +11,9 @@
  * sweep every SESSION_SWEEP_INTERVAL_MS milliseconds.
  *
  * ⚠️  PRIVACY: This store holds sessionId, doctorId, and expiresAt.
- *     It does NOT store the patient's phone number — that is discarded after
- *     the SMS dispatch in sessions.ts.
+ *     patientPhone is stored transiently for the WhatsApp results delivery
+ *     that fires immediately after scan completion. It is never written to
+ *     disk, never logged, and is evicted with the session on expiry.
  */
 
 export interface SessionRecord {
@@ -23,6 +24,13 @@ export interface SessionRecord {
   doctorConnected: boolean;
   vitalsReceived: boolean;
   createdAt: number;
+  /**
+   * Patient phone — held transiently for the post-scan WhatsApp delivery.
+   * Never persisted to disk. Evicted when the session expires.
+   */
+  patientPhone?: string;
+  /** BCP-47 language code for the Gemini AI WhatsApp summary. */
+  preferredLanguage: string;
 }
 
 const SESSION_SWEEP_INTERVAL_MS = 60_000; // 1 minute
@@ -35,9 +43,10 @@ class SessionStore {
     setInterval(() => this.sweep(), SESSION_SWEEP_INTERVAL_MS).unref();
   }
 
-  create(params: { sessionId: string; doctorId: string; expiresAt: number }): SessionRecord {
+  create(params: { sessionId: string; doctorId: string; expiresAt: number; patientPhone?: string; preferredLanguage?: string }): SessionRecord {
     const record: SessionRecord = {
       ...params,
+      preferredLanguage: params.preferredLanguage ?? 'en',
       patientConnected: false,
       doctorConnected: false,
       vitalsReceived: false,
