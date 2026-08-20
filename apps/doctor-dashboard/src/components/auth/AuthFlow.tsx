@@ -1,28 +1,86 @@
-import React, { useState } from 'react';
-import RoleSelection from './RoleSelection';
+import React, { useState, useEffect } from 'react';
 import LoginForm from './LoginForm';
 import { supabase } from '../../lib/supabaseClient';
+import type { Session } from '@supabase/supabase-js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 interface AuthFlowProps {
   onAuthenticated: (role: 'doctor' | 'receptionist') => void;
   initialRole: 'doctor' | 'receptionist';
+  /** Called when the logged-in user's DB role doesn't match the selected role. */
+  onRoleMismatch?: () => void;
+  /** Called when the user clicks "Back" on the login form. */
+  onBack?: () => void;
 }
 
 const AuthFlow: React.FC<AuthFlowProps> = ({
   onAuthenticated,
   initialRole,
+  onRoleMismatch,
+  onBack,
 }) => {
-  const [selectedRole, setSelectedRole] =
+  const [selectedRole] =
     useState<'doctor' | 'receptionist'>(initialRole);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleRoleSelect = (role: 'doctor' | 'receptionist') => {
-    setSelectedRole(role);
-    setError(null);
+  // ── Shared role enforcement after a successful Supabase sign-in ───────────
+
+  /**
+   * Queries GET /api/staff/me to get the user's actual DB role, then compares
+   * it against the role they selected on the role-selection screen.
+   *
+   * Returns true  → roles match, caller may proceed.
+   * Returns false → mismatch; this function has already signed the user out,
+   *                 set an inline error, and scheduled onRoleMismatch().
+   */
+  const enforceRoleMatch = async (
+    accessToken: string,
+    selectedRoleArg: 'doctor' | 'receptionist',
+  ): Promise<boolean> => {
+    let actualRole: string | null = null;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/staff/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (res.ok) {
+        const body = (await res.json()) as { role?: string };
+        // API returns lowercase role string ('doctor' | 'receptionist')
+        actualRole = (body.role ?? '').toLowerCase();
+      } else if (res.status === 403) {
+        // No Staff row yet (new sign-up) — allow through.
+        return true;
+      }
+    } catch {
+      // Network error — allow through rather than block login entirely.
+      return true;
+    }
+
+    if (actualRole && actualRole !== selectedRoleArg) {
+      // Role mismatch — sign the user out immediately.
+      await supabase.auth.signOut();
+
+      const actualRoleLabel = actualRole === 'doctor' ? 'Doctor' : 'Receptionist';
+
+      setError(
+        `This account is registered as a ${actualRoleLabel}. ` +
+          `Please select ${actualRoleLabel} on the previous screen.`,
+      );
+      setIsLoading(false);
+
+      // Let the user read the error for a moment, then reset to role selection.
+      setTimeout(() => {
+        onRoleMismatch?.();
+      }, 2800);
+
+      return false;
+    }
+
+    return true;
   };
 
   // ── Log In ────────────────────────────────────────────────────────────────
@@ -45,9 +103,7 @@ const AuthFlow: React.FC<AuthFlowProps> = ({
 
       if (msg.toLowerCase().includes('invalid login credentials')) {
         setError('Email or password is incorrect.');
-      } else if (
-        msg.toLowerCase().includes('email not confirmed')
-      ) {
+      } else if (msg.toLowerCase().includes('email not confirmed')) {
         setError(
           'Please confirm your email address before signing in.',
         );
@@ -60,15 +116,13 @@ const AuthFlow: React.FC<AuthFlowProps> = ({
 
     const { session } = data;
 
-    // Ensure the Staff row exists.
-    // A 409 means the row already exists.
-    const storedName = session.user.user_metadata?.['name'] as
-      | string
-      | undefined;
+    // ── BUG 2 FIX: Verify the role in the Staff DB before proceeding ─────
+    const roleOk = await enforceRoleMatch(session.access_token, selectedRole);
+    if (!roleOk) return; // enforceRoleMatch already set error + signed out
 
-    const storedRole = session.user.user_metadata?.['role'] as
-      | string
-      | undefined;
+    // Ensure the Staff row exists (idempotent — 409 means it already exists).
+    const storedName = session.user.user_metadata?.['name'] as string | undefined;
+    const storedRole = session.user.user_metadata?.['role'] as string | undefined;
 
     if (storedName && storedRole) {
       await fetch(`${API_BASE_URL}/api/staff`, {
@@ -84,17 +138,8 @@ const AuthFlow: React.FC<AuthFlowProps> = ({
       });
     }
 
-    // Verify the role in user_metadata if it exists.
-    const userRole = storedRole as
-      | 'doctor'
-      | 'receptionist'
-      | undefined;
-
     setIsLoading(false);
-
-    onAuthenticated(
-      (userRole ?? 'doctor') as 'doctor' | 'receptionist',
-    );
+    onAuthenticated(selectedRole);
   };
 
   // ── Sign Up ───────────────────────────────────────────────────────────────
@@ -108,19 +153,14 @@ const AuthFlow: React.FC<AuthFlowProps> = ({
     setIsLoading(true);
     setError(null);
 
-    // Store name and role in user_metadata so they survive
-    // email confirmation.
-    const { data, error: authError } =
-      await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name: fullName,
-            role,
-          },
-        },
-      });
+    // Store name and role in user_metadata so they survive email confirmation.
+    const { data, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name: fullName, role },
+      },
+    });
 
     if (authError) {
       setIsLoading(false);
@@ -144,39 +184,31 @@ const AuthFlow: React.FC<AuthFlowProps> = ({
     const { session, user } = data;
 
     // Register the Staff row immediately.
-    // If email confirmation is enabled, there may be no session,
+    // If email confirmation is enabled there may be no session,
     // so send supabaseUserId in the request body.
     if (user) {
-      const staffRes = await fetch(
-        `${API_BASE_URL}/api/staff`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(session && {
-              Authorization: `Bearer ${session.access_token}`,
-            }),
-          },
-          body: JSON.stringify({
-            name: fullName,
-            role: role.toUpperCase(),
-            supabaseUserId: user.id,
+      const staffRes = await fetch(`${API_BASE_URL}/api/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session && {
+            Authorization: `Bearer ${session.access_token}`,
           }),
         },
-      );
+        body: JSON.stringify({
+          name: fullName,
+          role: role.toUpperCase(),
+          supabaseUserId: user.id,
+        }),
+      });
 
       if (!staffRes.ok && staffRes.status !== 409) {
-        const body = await staffRes
-          .json()
-          .catch(() => ({}));
-
+        const body = await staffRes.json().catch(() => ({}));
         setIsLoading(false);
-
         setError(
           (body as { error?: string }).error ??
             'Failed to create staff account.',
         );
-
         return;
       }
     }
@@ -184,17 +216,12 @@ const AuthFlow: React.FC<AuthFlowProps> = ({
     // If Supabase returned a session immediately, we're done.
     if (session) {
       setIsLoading(false);
-
-      onAuthenticated(
-        role as 'doctor' | 'receptionist',
-      );
-
+      onAuthenticated(role as 'doctor' | 'receptionist');
       return;
     }
 
     // Email confirmation required.
     setIsLoading(false);
-
     setError(
       'Account created! Please check your email to confirm your address, then log in.',
     );
@@ -204,7 +231,11 @@ const AuthFlow: React.FC<AuthFlowProps> = ({
     <LoginForm
       role={selectedRole}
       onBack={() => {
-        window.location.reload();
+        if (onBack) {
+          onBack();
+        } else {
+          window.location.reload();
+        }
       }}
       onLogin={handleLogin}
       onSignUp={handleSignUp}
