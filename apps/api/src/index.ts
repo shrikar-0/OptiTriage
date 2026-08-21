@@ -187,7 +187,7 @@ triageNs.use(async (socket, next) => {
   }
 });
 
-triageNs.on('connection', (socket) => {
+triageNs.on('connection', async (socket) => {
   const { sessionId, doctorId, role } = socket.data.jwtPayload;
 
   // ── Dashboard connections (Supabase JWT) ─────────────────────────────────
@@ -200,8 +200,35 @@ triageNs.on('connection', (socket) => {
     return; // skip session-store check
   }
 
-  // Validate the session exists before allowing the socket to proceed
-  const session = sessionStore.get(sessionId);
+  // Validate session exists — check in-memory store first, then fall back
+  // to the DB so scans survive an API server restart mid-session.
+  let session = sessionStore.get(sessionId);
+  if (!session) {
+    // Attempt DB recovery: if the DoctorSession exists and hasn't expired,
+    // recreate the in-memory record so the rest of the flow works unchanged.
+    try {
+      const db = getPrismaClient();
+      const dbSession = db
+        ? await db.doctorSession.findUnique({
+            where: { id: sessionId },
+            select: { id: true, doctorId: true, expiresAt: true, status: true, preferredLanguage: true },
+          })
+        : null;
+
+      if (dbSession && dbSession.status !== 'EXPIRED' && dbSession.expiresAt > new Date()) {
+        session = sessionStore.create({
+          sessionId: dbSession.id,
+          doctorId: dbSession.doctorId,
+          expiresAt: dbSession.expiresAt.getTime(),
+          preferredLanguage: dbSession.preferredLanguage ?? 'en',
+        });
+        console.log(`[socket] session ${sessionId} recovered from DB after store miss`);
+      }
+    } catch (dbErr) {
+      console.warn('[socket] DB session recovery failed:', (dbErr as Error).message);
+    }
+  }
+
   if (!session) {
     socket.emit('error', { code: 'SESSION_NOT_FOUND', message: 'Session not found or expired.' });
     socket.disconnect(true);
@@ -340,13 +367,18 @@ triageNs.on('connection', (socket) => {
 
     // ── Broadcast to doctor room with EWS risk band + NEWS2 summary ────────
     // ewsScore was validated by Zod; getEwsRiskBand is a pure function.
+    const sessionRecord = sessionStore.get(sessionId);
     const broadcastPayload = {
       ...vitals,
       ewsRiskBand: getEwsRiskBand(vitals.ewsScore),
+      // Include patient metadata so the dashboard can display it immediately
+      // without waiting for the next queue poll.
+      patientName:  sessionRecord?.patientName ?? null,
+      patientAge:   sessionRecord?.patientAge  ?? null,
       news2: {
-        totalScore: news2.totalScore,
-        riskBand: news2.riskBand,
-        singleParameterAlert: news2.singleParameterAlert,
+        totalScore:               news2.totalScore,
+        riskBand:                 news2.riskBand,
+        singleParameterAlert:     news2.singleParameterAlert,
         unobservedParameterCount: news2.unobservedParameterCount,
       },
     };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { Session } from '@supabase/supabase-js';
 import Sidebar from '../components/shared/Sidebar';
@@ -46,71 +46,80 @@ export default function Dashboard({
 }) {
   const accessToken = session.access_token;
 
-  // ── Queue state ─────────────────────────────────────────────────────────────
-  const [sessions, setSessions]               = useState<QueueItem[]>([]);
-  const [queueLoading, setQueueLoading]       = useState(true);
+  // ── Queue state ─────────────────────────────────────────────────────────────────
+  const [sessions, setSessions]                   = useState<QueueItem[]>([]);
+  const [queueLoading, setQueueLoading]           = useState(true);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
-  // ── Fetch + Socket.io initialisation ────────────────────────────────────────
+  // ── Queue fetch — reused for initial load, 20-s polling, post-vitals refresh ─
+  const fetchQueue = useCallback(async (showLoader = false) => {
+    try {
+      if (showLoader) setQueueLoading(true);
+      const res = await fetch(`${API_URL}/api/queue`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        console.warn(`[Dashboard] Queue fetch returned ${res.status}.`);
+        if (showLoader) setSessions([]);
+        return;
+      }
+      const data = (await res.json()) as { sessions: QueueItem[] };
+      const parseTs = (v: unknown): number =>
+        typeof v === 'number'  ? v
+        : typeof v === 'string' ? new Date(v).getTime()
+        : v instanceof Date    ? v.getTime()
+        : Date.now();
+      setSessions(
+        sortSessions(
+          (data.sessions ?? []).map((s) => ({
+            ...s,
+            createdAt:  parseTs(s.createdAt),
+            capturedAt: s.capturedAt != null ? parseTs(s.capturedAt) : null,
+            isScanning: s.sessionStatus === 'SCANNING',
+          })),
+        ),
+      );
+    } catch (err) {
+      console.warn('[Dashboard] Queue fetch failed:', (err as Error).message);
+      if (showLoader) setSessions([]);
+    } finally {
+      if (showLoader) setQueueLoading(false);
+    }
+  }, [accessToken]);
+
+  // ── Socket.io + polling initialisation ─────────────────────────────────
   useEffect(() => {
     let socket: Socket | null = null;
 
-    async function initQueue() {
-      try {
-        const res = await fetch(`${API_URL}/api/queue`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+    fetchQueue(true);
 
-        if (!res.ok) {
-          console.warn(`[Dashboard] Queue fetch returned ${res.status}.`);
-          setSessions([]);
-          return;
-        }
+    // 20-s fallback poll — keeps queue fresh if a socket event is missed
+    const pollTimer = setInterval(() => fetchQueue(), 20_000);
 
-        const data = (await res.json()) as { sessions: QueueItem[] };
-        setSessions(
-          sortSessions((data.sessions ?? []).map((s) => {
-            // Prisma DateTime fields arrive as ISO-8601 strings over JSON.
-            // Normalise to Unix ms so all downstream time arithmetic is correct.
-            const parseTs = (v: unknown): number =>
-              typeof v === 'number' ? v
-              : typeof v === 'string' ? new Date(v).getTime()
-              : v instanceof Date ? (v as Date).getTime()
-              : Date.now();
-
-            return {
-              ...s,
-              createdAt:  parseTs(s.createdAt),
-              capturedAt: s.capturedAt != null ? parseTs(s.capturedAt) : null,
-              isScanning: s.sessionStatus === 'SCANNING',
-            };
-          })),
-        );
-      } catch (err) {
-        console.warn('[Dashboard] Queue fetch failed:', (err as Error).message);
-        setSessions([]);
-      } finally {
-        setQueueLoading(false);
-      }
-    }
-
-    initQueue();
-
-    // ── Socket.io: live vitals + session events ────────────────────────────
-    // Uses the Supabase access_token — the server socket middleware accepts
-    // it via the Supabase JWT verification path (authType: 'dashboard').
+    // Allow 'polling' fallback so WebSocket-only never silently fails behind
+    // a hospital/hotel proxy that blocks upgrade requests.
     socket = io(`${API_URL}/triage`, {
       auth:       { token: accessToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
 
+    socket.on('connect', () =>
+      console.log('[Dashboard] Socket connected, id:', socket?.id)
+    );
+    socket.on('connect_error', (err) =>
+      console.warn('[Dashboard] Socket connect_error:', err.message)
+    );
+
     socket.on('vitals:update', (payload: Record<string, unknown>) => {
-      console.log('[Dashboard] Received vitals update:', payload);
+      console.log('[Dashboard] vitals:update received:', payload);
+
       setSessions((prev) => {
-        // Normalise the risk band label that comes from the server
-        const raw = String(payload['ewsRiskBand'] ?? '').toLowerCase();
+        // Server already sends 'green' | 'yellow' | 'red' — accept as-is.
+        // Previous code mapped 'low'→'green' / 'medium'→'yellow', which caused
+        // every band to fall through to the else branch and become 'red'.
+        const rawBand = String(payload['ewsRiskBand'] ?? '').toLowerCase();
         const ewsRiskBand: 'green' | 'yellow' | 'red' =
-          raw === 'low' ? 'green' : raw === 'medium' ? 'yellow' : 'red';
+          rawBand === 'red' ? 'red' : rawBand === 'yellow' ? 'yellow' : 'green';
 
         const news2 = payload['news2'] as Record<string, unknown> | undefined;
 
@@ -155,6 +164,9 @@ export default function Dashboard({
 
         return sortSessions(next);
       });
+
+      // Re-fetch from DB 1 s later so queue reflects persisted truth.
+      setTimeout(() => fetchQueue(), 1000);
     });
 
     socket.on('error', (err: unknown) => {
@@ -202,8 +214,10 @@ export default function Dashboard({
     });
 
     return () => {
+      clearInterval(pollTimer);
       socket?.disconnect();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Derived state ────────────────────────────────────────────────────────────

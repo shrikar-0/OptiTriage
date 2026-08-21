@@ -9,7 +9,7 @@ import { getGuidance, toneClasses } from '../../lib/guidance';
 import PulseHalo from './PulseHalo';
 import SignalBars from './SignalBars';
 
-import RrMobileDiagOverlay from './RrMobileDiagOverlay';
+
 
 const CYCLE_DURATION_SEC = 20;
 const TOTAL_CYCLES = 4;
@@ -138,9 +138,6 @@ export default function ScanExperience({ onComplete }: ScanExperienceProps) {
         <p className="max-w-[240px] text-[13px] leading-relaxed text-ink/55">{guidance.detail}</p>
         <SignalBars active={metrics?.valid ?? false} />
       </div>
-
-      {/* ── Mobile-Visible Diagnostic Overlay ── */}
-      <RrMobileDiagOverlay diagSnapshot={diagSnapshot} rppgMetrics={metrics ?? undefined} lastProbeMessage={lastProbeMessage} />
     </div>
   );
 }

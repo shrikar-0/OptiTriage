@@ -24,6 +24,10 @@ export interface SessionRecord {
   doctorConnected: boolean;
   vitalsReceived: boolean;
   createdAt: number;
+  /** Patient display name — stored for broadcast payload enrichment. */
+  patientName?: string;
+  /** Patient age — stored for broadcast payload enrichment. */
+  patientAge?: number;
   /**
    * Patient phone — held transiently for the post-scan WhatsApp delivery.
    * Never persisted to disk. Evicted when the session expires.
@@ -43,7 +47,7 @@ class SessionStore {
     setInterval(() => this.sweep(), SESSION_SWEEP_INTERVAL_MS).unref();
   }
 
-  create(params: { sessionId: string; doctorId: string; expiresAt: number; patientPhone?: string; preferredLanguage?: string }): SessionRecord {
+  create(params: { sessionId: string; doctorId: string; expiresAt: number; patientPhone?: string; patientName?: string; patientAge?: number; preferredLanguage?: string }): SessionRecord {
     const record: SessionRecord = {
       ...params,
       preferredLanguage: params.preferredLanguage ?? 'en',

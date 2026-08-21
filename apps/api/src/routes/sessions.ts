@@ -92,6 +92,8 @@ export function createSessionsRouter(io: SocketIOServer): Router {
         doctorId: staffUser.userId,
         expiresAt,
         patientPhone: patientPhone,
+        patientName,
+        patientAge,
         preferredLanguage,
       });
 
