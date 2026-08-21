@@ -4,8 +4,6 @@
 
 **Calm. Accurate. Fast.**
 
-
-[![License](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 [![React](https://img.shields.io/badge/React-19-0ea5e9?style=flat-square&logo=react&logoColor=white)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
@@ -67,7 +65,7 @@ Receptionist                Patient Browser              Doctor Dashboard
      │                    └──────┬──────┘                       │
      │                           │                              │
      │                    ┌──────▼──────┐                       │
-     │                    │  FFT Peak   │ BPM + HRV (RMSSD)    │
+     │                    │  FFT Peak   │ BPM + HRV (RMSSD)     │
      │                    │  Detection  │                       │
      │                    └──────┬──────┘                       │
      │                           │                              │
@@ -169,12 +167,12 @@ Receptionist                Patient Browser              Doctor Dashboard
 ┌─────────────────────────────────────────────────────────────────┐
 │                     PATIENT'S BROWSER                           │
 │                                                                 │
-│  Camera → MediaPipe → Skin ROI ─→ CHROM/EVM ─→ FFT → BPM/HRV  │
+│  Camera → MediaPipe → Skin ROI ─→ CHROM/EVM ─→ FFT → BPM/HRV    │
 │                    → Motion ROI → Optical Flow → Resp Rate      │
 │                                                                 │
-│  SQI Gate → Multi-Cycle Averaging → Risk Classifier            │
+│  SQI Gate → Multi-Cycle Averaging → Risk Classifier             │
 │                                                                 │
-│  ← No video leaves this boundary →                             │
+│  ← No video leaves this boundary →                              │
 └──────────────────────┬──────────────────────────────────────────┘
                        │ { bpm, hrv, respRate, ewsScore, sessionId }
                        │ Socket.io (encrypted)
@@ -231,8 +229,8 @@ OptiTriage/
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/optitriage.git
-cd optitriage
+git clone https://github.com/shrikar-0/OptiTriage .git
+cd OptiTriage
 
 # Install dependencies
 pnpm install
